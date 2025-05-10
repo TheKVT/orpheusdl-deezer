@@ -70,6 +70,10 @@ class DeezerAPI:
         return resp['results']
 
     def login_via_email(self, email, password):
+
+        if not self.client_id or not self.client_secret:
+            raise self.exception('client_id/client_secret setting is empty or missing, check settings.json')
+
         # server sends set-cookie header with anonymous sid
         self.s.get('https://www.deezer.com')
         
@@ -99,7 +103,15 @@ class DeezerAPI:
         if not user_data['USER']['USER_ID']:
             self.s.cookies.clear()
             raise self.exception('Invalid arl')
-        print('ARL Country : ', self.country)
+        
+        if len(self.country) == 2:
+            code_point_1 = ord(self.country[0]) + 127397
+            code_point_2 = ord(self.country[1]) + 127397
+            country_flag = chr(code_point_1) + chr(code_point_2)
+        else:
+            country_flag = ''
+
+        print(f"ARL Country: {self.country} {country_flag} - Available Formats: {' | '.join(self.available_formats)}")
         return user_data
 
     def get_track(self, id):
