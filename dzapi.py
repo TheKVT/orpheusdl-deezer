@@ -200,7 +200,8 @@ class DeezerAPI:
     def _get_blowfish_key(self, track_id):
         # yeah, you use the bytes of the hex digest of the hash. bruh moment
         md5_id = MD5.new(str(track_id).encode()).hexdigest().encode('ascii')
-
+        if not self.bf_secret:
+            raise self.exception('bf_secret missing or empty, check config.json')
         key = bytes([md5_id[i] ^ md5_id[i + 16] ^ self.bf_secret[i] for i in range(16)])
 
         return key
