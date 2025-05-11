@@ -53,22 +53,27 @@ class ModuleInterface:
             CoverCompressionEnum.low: 50
         }
 
-        arl = module_controller.temporary_settings_controller.read('arl') 
+        arl = module_controller.temporary_settings_controller.read('arl')
 
-        if arl:
-            try:
+        if not arl:
+            self.login(self.settings['email'], self.settings['password'], self.settings['arl'] or arl)
+        else:
+            # swap between arls without removing loginstorage.bin each time
+            if arl != self.settings['arl']:
+                self.login(self.settings['email'], self.settings['password'], self.settings['arl'] or arl)
+            else:
                 self.session.login_via_arl(arl)
                 self.check_sub()
-            except self.exception:
-                self.login(self.settings['email'], self.settings['password'], self.settings['arl'] or arl)
-                
+
     def login(self, email: str, password: str, arl: str):
         if email and password:
+            print('Logging in using email/pass...')
             arl, _ = self.session.login_via_email(email, password)
         elif arl:
+            print('Logging in using arl...')
             self.session.login_via_arl(arl)
         else:
-            return
+            raise self.exception('credentials/arl is empty or missing, check settings.json')
 
         self.tsc.set('arl', arl)
         self.check_sub()
@@ -131,7 +136,7 @@ class ModuleInterface:
             if not countries:
                 error = 'Track not available'
             elif self.session.country not in countries:
-                error = 'Track not available in your country'
+                error = f"Your country: {self.session.country} - Track is only available in the following countries: {', '.join(countries)}"
             else:
                 formats_to_check = premium_formats
                 while len(formats_to_check) != 0:
