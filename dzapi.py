@@ -196,6 +196,14 @@ class DeezerAPI:
         resp = self.s.post('https://media.deezer.com/v1/get_url', json=json).json()
         return resp['data'][0]['media'][0]['sources'][0]['url']
     
+    def get_album_genres(self, album_id):
+        # fetch genre(s) for a given album ID since Deezer's API doesn't return track-specific genres (which requires an extra call)
+        resp = self.s.get(f'https://api.deezer.com/album/{album_id}').json()
+        if 'error' in resp:
+            raise self.exception((resp['error']['type'], resp['error']['message'], resp['error']['code']))
+        # genres are in a nested dict, so we need to get the 'data' key from the 'genres' dict
+        genres = resp.get('genres', {}).get('data', [])
+        return [genre['name'] for genre in genres]
    
     def _get_blowfish_key(self, track_id):
         # yeah, you use the bytes of the hex digest of the hash. bruh moment

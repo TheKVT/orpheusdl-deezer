@@ -13,7 +13,7 @@ module_information = ModuleInformation(
     global_settings = {'client_id': '447462', 'client_secret': 'a83bf7f38ad2f137e444727cfc3775cf', 'bf_secret': ''},
     session_settings = {'email': '', 'password': '', 'arl': ''},
     session_storage_variables = ['arl'],
-    netlocation_constant = 'deezer',
+    netlocation_constant = ['deezer', 'dzr.page.link'], # add support for dzr.page.link alternate domain
     url_decoding = ManualEnum.manual,
     login_behaviour = ManualEnum.manual,
     test_url = 'https://www.deezer.com/track/3135556',
@@ -81,8 +81,8 @@ class ModuleInterface:
     def custom_url_parse(self, link):
         url = urlparse(link)
 
-        if url.hostname == 'deezer.page.link':
-            r = get('https://deezer.page.link' + url.path, allow_redirects=False)
+        if url.hostname in ('deezer.page.link', 'dzr.page.link'): # new deezer share link domain
+            r = get(f'https://{url.hostname}{url.path}', allow_redirects=False)
             if r.status_code != 302:
                 raise self.exception(f'Invalid URL: {link}')
             url = urlparse(r.headers['Location'])
@@ -114,6 +114,27 @@ class ModuleInterface:
         if 'FALLBACK' in t_data:
             t_data = t_data['FALLBACK']
 
+        album_artist = None
+
+        if not is_user_upped:
+            try:
+                # fetch from album data
+                album = self.session.get_album(t_data['ALB_ID'])
+                album_data = album['DATA']
+                if 'ART_NAME' in album_data:
+                    album_artist = album_data['ART_NAME']
+            except Exception as e:
+                print(f"DEBUG: Error while fetching album artist: {str(e)}")
+                album_artist = None
+
+        # fetch genres from the album and set as the genre tag
+        genres = []
+        if t_data['ALB_ID']:
+            try:
+                genres = self.session.get_album_genres(t_data['ALB_ID'])
+            except Exception as e:
+                print(f"DEBUG: Error while fetching genres: {str(e)}")
+
         tags = Tags(
             track_number = t_data.get('TRACK_NUMBER'),
             copyright = t_data.get('COPYRIGHT'),
@@ -121,6 +142,8 @@ class ModuleInterface:
             disc_number = t_data.get('DISK_NUMBER'),
             replay_gain = t_data.get('GAIN'),
             release_date = t_data.get('PHYSICAL_RELEASE_DATE'),
+            album_artist = album_artist,
+            genres = genres
         )
 
         for key in alb_tags:
@@ -369,7 +392,8 @@ class ModuleInterface:
             ImageFileTypeEnum.png: f'{res}x0-none-100-0-0.png'
         }[file_type]
 
-        return f'https://cdns-images.dzcdn.net/images/{img_type.name}/{md5}/{filename}'
+        # can also use 'cdns-images.dzcdn.net' if needed
+        return f'https://cdn-images.dzcdn.net/images/{img_type.name}/{md5}/{filename}'
 
     def check_sub(self):
         if not self.disable_subscription_check and (self.format not in self.session.available_formats):
