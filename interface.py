@@ -1,10 +1,12 @@
+import logging
 import re
 from enum import Enum
 from urllib.parse import urlparse
 from requests import get
+from requests.exceptions import RequestException
 from utils.models import *
 from utils.utils import create_temp_filename
-from .dzapi import DeezerAPI
+from .dzapi import DeezerAPI, APIError
 
 
 module_information = ModuleInformation(
@@ -183,8 +185,14 @@ class ModuleInterface:
             if specs:
                 bit_depth = specs['bit_depth']
                 sample_rate = specs['sample_rate'] / 1000.0
-                if t_data.get('DURATION') not in (None, '0'):
-                    bitrate = int(int(t_data[f'FILESIZE_{format}']) * 8 / float(t_data['DURATION']) / 1000)
+                # total_samples is exact but belongs to the probed track, the API only
+                # reports whole-second durations for the rest
+                if specs['probed_track'] == t_data['SNG_ID'] and specs['total_samples']:
+                    duration = specs['total_samples'] / specs['sample_rate']
+                else:
+                    duration = float(t_data['DURATION']) if t_data.get('DURATION') not in (None, '0') else None
+                if duration:
+                    bitrate = int(int(t_data[f'FILESIZE_{format}']) * 8 / duration / 1000)
 
         download_extra_kwargs = {
             'id': t_data['SNG_ID'],
@@ -296,13 +304,19 @@ class ModuleInterface:
         )
 
     def _get_probed_specs(self, album_id, t_data, format):
-        # tracks of an album share their master, so specs are probed once per album and format
+        # tracks of an album share their master, so bit depth and sample rate are probed once
+        # per album and format, total_samples stays track specific
         cached = self._probe_cache.get((album_id, format))
         if cached is not None:
             return cached
         try:
             specs = self.session.probe_flac_specs(t_data['SNG_ID'], t_data['TRACK_TOKEN'], t_data['TRACK_TOKEN_EXPIRE'], format)
-        except Exception:
+            if specs:
+                specs['probed_track'] = t_data['SNG_ID']
+        except (APIError, self.exception, RequestException, KeyError) as e:
+            # probe is best-effort, fall back to tier defaults. KeyError is expected when a song
+            # entry has no stream token, the download path still surfaces real API changes
+            logging.debug(f'Deezer: failed to probe lossless specs for track {t_data.get("SNG_ID")}: {e}')
             specs = None
         self._probe_cache[(album_id, format)] = specs
         return specs
@@ -315,19 +329,16 @@ class ModuleInterface:
         premium_formats = ['FLAC_24', 'FLAC', 'MP3_320']
         chain = premium_formats[premium_formats.index(self.format):] if self.format in premium_formats else [self.format]
         for f in chain:
+            # pageAlbum song entries already carry the stream token, no extra pageTrack needed
             track = next((t for t in tracks_data if str(t.get(f'FILESIZE_{f}', '0')) != '0'), None)
             if track is None:
                 continue
             bit_depth, sample_rate = (24, 96.0) if f == 'FLAC_24' else (16, 44.1)
             if f in ('FLAC', 'FLAC_24'):
-                try:
-                    t_data = self.session.get_track(track['SNG_ID'])['DATA']
-                    specs = self._get_probed_specs(album_id, t_data, f)
-                    if specs:
-                        bit_depth = specs['bit_depth']
-                        sample_rate = specs['sample_rate'] / 1000.0
-                except Exception:
-                    pass
+                specs = self._get_probed_specs(album_id, track, f)
+                if specs:
+                    bit_depth = specs['bit_depth']
+                    sample_rate = specs['sample_rate'] / 1000.0
             return self.quality_format.format(bit_depth=bit_depth, sample_rate=sample_rate)
         return self.quality_format.format(bit_depth=16, sample_rate=44.1)
 

@@ -220,7 +220,7 @@ class DeezerAPI:
             if len(buf) >= 26:
                 break
         req.close()
-        if buf[:4] != b'fLaC':
+        if len(buf) < 26 or buf[:4] != b'fLaC':
             return None
 
         packed = struct.unpack('>Q', buf[18:26])[0]
