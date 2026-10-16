@@ -66,6 +66,9 @@ class DeezerAPI:
             for k, v in format_dict.items():
                 if resp['results']['USER']['OPTIONS'][k]:
                     self.available_formats.append(v)
+            # hifi (FLAC_24) is bundled with the lossless tier, no separate flag exists
+            if 'FLAC' in self.available_formats:
+                self.available_formats.append('FLAC_24')
 
         return resp['results']
 
@@ -194,7 +197,10 @@ class DeezerAPI:
             'track_tokens': [track_token]
         }
         resp = self.s.post('https://media.deezer.com/v1/get_url', json=json).json()
-        return resp['data'][0]['media'][0]['sources'][0]['url']
+        media = resp['data'][0]['media']
+        if not media:
+            raise self.exception(f'No media available for {format} (track {id})')
+        return media[0]['sources'][0]['url']
     
    
     def _get_blowfish_key(self, track_id):

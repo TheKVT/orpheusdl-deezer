@@ -16,7 +16,7 @@
 ```download_quality```:
 | Value      | Format                                                                       |
 | ---------- | ---------------------------------------------------------------------------- |
-| "hifi"     | 16-bit 44.1kHz FLAC / 360RA if available and ```spatial_codecs``` is enabled |
+| "hifi"     | 24-bit 96kHz FLAC, falling back to 16-bit 44.1kHz FLAC                       |
 | "lossless" | 16-bit 44.1kHz FLAC                                                          |
 | "high"     | MP3 320kbps                                                                  |
 | "medium"   | MP3 320kbps                                                                  |
@@ -24,7 +24,7 @@
 | "minimum"  | MP3 128kbps                                                                  |
 
 ```spatial_codecs```:\
-Enables 360RA downloads if ```download_quality``` is set to ```hifi```
+Not supported by the Deezer module, has no effect
 
 ```main_resolution```:\
 Maxes out at 3000px\

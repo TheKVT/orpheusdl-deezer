@@ -45,7 +45,7 @@ class ModuleInterface:
             QualityEnum.MEDIUM: 'MP3_320',
             QualityEnum.HIGH: 'MP3_320',
             QualityEnum.LOSSLESS: 'FLAC',
-            QualityEnum.HIFI: 'FLAC'
+            QualityEnum.HIFI: 'FLAC_24'
         }
         self.format = self.quality_parse[module_controller.orpheus_options.quality_tier]
         self.compression_nums = {
@@ -131,7 +131,7 @@ class ModuleInterface:
             if not t_data['RIGHTS']['STREAM_ADS_AVAILABLE']:
                 error = 'Cannot download track uploaded by another user'
         else:
-            premium_formats = ['FLAC', 'MP3_320']
+            premium_formats = ['FLAC_24', 'FLAC', 'MP3_320']
             countries = t_data['AVAILABLE_COUNTRIES']['STREAM_ADS']
             if not countries:
                 error = 'Track not available'
@@ -147,7 +147,8 @@ class ModuleInterface:
 
                 temp_f = None
                 for f in formats_to_check:
-                    if t_data[f'FILESIZE_{f}'] != '0':
+                    # FILESIZE_FLAC_24 can be an int instead of a string
+                    if str(t_data.get(f'FILESIZE_{f}', '0')) != '0':
                         temp_f = f
                         break
                 if temp_f is None:
@@ -162,6 +163,7 @@ class ModuleInterface:
             'MP3_128': CodecEnum.MP3,
             'MP3_320': CodecEnum.MP3,
             'FLAC': CodecEnum.FLAC,
+            'FLAC_24': CodecEnum.FLAC,
         }[format]
 
         bitrate = {
@@ -169,6 +171,7 @@ class ModuleInterface:
             'MP3_128': 128,
             'MP3_320': 320,
             'FLAC': 1411,
+            'FLAC_24': 4608,
         }[format]
 
         download_extra_kwargs = {
@@ -189,8 +192,8 @@ class ModuleInterface:
             release_year = int(tags.release_date.split('-')[0]) if tags.release_date else None,
             explicit = t_data['EXPLICIT_LYRICS'] == '1' if 'EXPLICIT_LYRICS' in t_data else None,
             artist_id = t_data['ART_ID'],
-            bit_depth = 16,
-            sample_rate = 44.1,
+            bit_depth = 24 if format == 'FLAC_24' else 16,
+            sample_rate = 96.0 if format == 'FLAC_24' else 44.1,
             bitrate = bitrate,
             download_extra_kwargs = download_extra_kwargs,
             cover_extra_kwargs = {'data': {track_id: t_data['ALB_PICTURE']}},
