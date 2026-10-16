@@ -49,6 +49,7 @@ class ModuleInterface:
         }
         self.format = self.quality_parse[module_controller.orpheus_options.quality_tier]
         self.quality_format = self.settings.get('quality_format', '')
+        self._probe_cache = {}
         self.compression_nums = {
             CoverCompressionEnum.high: 80,
             CoverCompressionEnum.low: 50
@@ -175,18 +176,15 @@ class ModuleInterface:
             'FLAC_24': (24, 96.0, 4608),
         }[format]
 
-        # lossless specs vary per track, read the actual ones from the stream header
+        # lossless specs vary per album, read the actual ones from the stream header
         bit_depth, sample_rate, bitrate = default_specs
         if format in ('FLAC', 'FLAC_24') and error is None:
-            try:
-                specs = self.session.probe_flac_specs(t_data['SNG_ID'], t_data['TRACK_TOKEN'], t_data['TRACK_TOKEN_EXPIRE'], format)
-                if specs and specs['total_samples']:
-                    duration = specs['total_samples'] / specs['sample_rate']
-                    bit_depth = specs['bit_depth']
-                    sample_rate = specs['sample_rate'] / 1000.0
-                    bitrate = int(int(t_data[f'FILESIZE_{format}']) * 8 / duration / 1000)
-            except Exception:
-                pass
+            specs = self._get_probed_specs(t_data['ALB_ID'], t_data, format)
+            if specs:
+                bit_depth = specs['bit_depth']
+                sample_rate = specs['sample_rate'] / 1000.0
+                if t_data.get('DURATION') not in (None, '0'):
+                    bitrate = int(int(t_data[f'FILESIZE_{format}']) * 8 / float(t_data['DURATION']) / 1000)
 
         download_extra_kwargs = {
             'id': t_data['SNG_ID'],
@@ -252,7 +250,7 @@ class ModuleInterface:
 
         return AlbumInfo(
             name = a_data['ALB_TITLE'],
-            quality = self._get_album_quality(tracks_data),
+            quality = self._get_album_quality(album_id, tracks_data),
             artist = a_data['ART_NAME'],
             tracks = [track['SNG_ID'] for track in tracks_data],
             release_year = alb_tags['release_date'].split('-')[0],
@@ -296,7 +294,19 @@ class ModuleInterface:
             albums = self.session.get_artist_album_ids(artist_id, 0, -1, get_credited_albums),
         )
 
-    def _get_album_quality(self, tracks_data):
+    def _get_probed_specs(self, album_id, t_data, format):
+        # tracks of an album share their master, so specs are probed once per album and format
+        cached = self._probe_cache.get((album_id, format))
+        if cached is not None:
+            return cached
+        try:
+            specs = self.session.probe_flac_specs(t_data['SNG_ID'], t_data['TRACK_TOKEN'], t_data['TRACK_TOKEN_EXPIRE'], format)
+        except Exception:
+            specs = None
+        self._probe_cache[(album_id, format)] = specs
+        return specs
+
+    def _get_album_quality(self, album_id, tracks_data):
         if not self.quality_format:
             return None
 
@@ -311,7 +321,7 @@ class ModuleInterface:
             if f in ('FLAC', 'FLAC_24'):
                 try:
                     t_data = self.session.get_track(track['SNG_ID'])['DATA']
-                    specs = self.session.probe_flac_specs(t_data['SNG_ID'], t_data['TRACK_TOKEN'], t_data['TRACK_TOKEN_EXPIRE'], f)
+                    specs = self._get_probed_specs(album_id, t_data, f)
                     if specs:
                         bit_depth = specs['bit_depth']
                         sample_rate = specs['sample_rate'] / 1000.0
