@@ -166,13 +166,26 @@ class ModuleInterface:
             'FLAC_24': CodecEnum.FLAC,
         }[format]
 
-        bitrate = {
-            'MP3_MISC': None,
-            'MP3_128': 128,
-            'MP3_320': 320,
-            'FLAC': 1411,
-            'FLAC_24': 4608,
+        default_specs = {
+            'MP3_MISC': (16, 44.1, None),
+            'MP3_128': (16, 44.1, 128),
+            'MP3_320': (16, 44.1, 320),
+            'FLAC': (16, 44.1, 1411),
+            'FLAC_24': (24, 96.0, 4608),
         }[format]
+
+        # lossless specs vary per track, read the actual ones from the stream header
+        bit_depth, sample_rate, bitrate = default_specs
+        if format in ('FLAC', 'FLAC_24') and error is None:
+            try:
+                specs = self.session.probe_flac_specs(t_data['SNG_ID'], t_data['TRACK_TOKEN'], t_data['TRACK_TOKEN_EXPIRE'], format)
+                if specs and specs['total_samples']:
+                    duration = specs['total_samples'] / specs['sample_rate']
+                    bit_depth = specs['bit_depth']
+                    sample_rate = specs['sample_rate'] / 1000.0
+                    bitrate = int(int(t_data[f'FILESIZE_{format}']) * 8 / duration / 1000)
+            except Exception:
+                pass
 
         download_extra_kwargs = {
             'id': t_data['SNG_ID'],
@@ -192,8 +205,8 @@ class ModuleInterface:
             release_year = int(tags.release_date.split('-')[0]) if tags.release_date else None,
             explicit = t_data['EXPLICIT_LYRICS'] == '1' if 'EXPLICIT_LYRICS' in t_data else None,
             artist_id = t_data['ART_ID'],
-            bit_depth = 24 if format == 'FLAC_24' else 16,
-            sample_rate = 96.0 if format == 'FLAC_24' else 44.1,
+            bit_depth = bit_depth,
+            sample_rate = sample_rate,
             bitrate = bitrate,
             download_extra_kwargs = download_extra_kwargs,
             cover_extra_kwargs = {'data': {track_id: t_data['ALB_PICTURE']}},

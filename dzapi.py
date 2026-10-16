@@ -1,3 +1,4 @@
+import struct
 from random import randint
 from time import time
 from math import ceil
@@ -201,8 +202,34 @@ class DeezerAPI:
         if not media:
             raise self.exception(f'No media available for {format} (track {id})')
         return media[0]['sources'][0]['url']
-    
-   
+
+    def probe_flac_specs(self, id, track_token, track_token_expiry, format):
+        # lossless streams vary per track (16/44.1 to 24/96), true specs live in the
+        # STREAMINFO header of the first stream chunk
+        url = self.get_track_url(id, track_token, track_token_expiry, format)
+        req = self.s.get(url, stream=True)
+        req.raise_for_status()
+        bf_key = self._get_blowfish_key(id)
+        buf = b''
+        for i, chunk in enumerate(req.iter_content(2048)):
+            if i % 3 == 0 and len(chunk) == 2048:
+                cipher = Blowfish.new(bf_key, Blowfish.MODE_CBC, b"\x00\x01\x02\x03\x04\x05\x06\x07")
+                buf += cipher.decrypt(chunk)
+            else:
+                buf += chunk
+            if len(buf) >= 26:
+                break
+        req.close()
+        if buf[:4] != b'fLaC':
+            return None
+
+        packed = struct.unpack('>Q', buf[18:26])[0]
+        return {
+            'sample_rate': (packed >> 44) & 0xFFFFF,
+            'bit_depth': ((packed >> 36) & 0x1F) + 1,
+            'total_samples': packed & 0xFFFFFFFFF
+        }
+
     def _get_blowfish_key(self, track_id):
         # yeah, you use the bytes of the hex digest of the hash. bruh moment
         md5_id = MD5.new(str(track_id).encode()).hexdigest().encode('ascii')
