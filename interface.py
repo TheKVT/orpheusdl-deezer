@@ -242,7 +242,7 @@ class ModuleInterface:
         alb_tags = {
             'total_tracks': total_tracks,
             'total_discs': total_discs,
-            'upc': a_data['UPC'],
+            'upc': a_data.get('UPC'),
             'label': a_data['LABEL_NAME'],
             'album_artist': a_data['ART_NAME'],
             'release_date': a_data.get('ORIGINAL_RELEASE_DATE') or a_data['PHYSICAL_RELEASE_DATE']
@@ -256,6 +256,7 @@ class ModuleInterface:
             release_year = alb_tags['release_date'].split('-')[0],
             explicit = a_data['EXPLICIT_ALBUM_CONTENT']['EXPLICIT_LYRICS_STATUS'] in (1, 4),
             artist_id = a_data['ART_ID'],
+            upc = a_data.get('UPC'),
             cover_url = self.get_image_url(a_data['ALB_PICTURE'], ImageType.cover, cover_type, self.default_cover.resolution, self.compression_nums[self.default_cover.compression]),
             cover_type = cover_type,
             all_track_cover_jpg_url = self.get_image_url(a_data['ALB_PICTURE'], ImageType.cover, ImageFileTypeEnum.jpg, self.default_cover.resolution, self.compression_nums[self.default_cover.compression]),
