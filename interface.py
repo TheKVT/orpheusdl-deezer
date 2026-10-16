@@ -175,7 +175,7 @@ class ModuleInterface:
             'MP3_128': (16, 44.1, 128),
             'MP3_320': (16, 44.1, 320),
             'FLAC': (16, 44.1, 1411),
-            'FLAC_24': (24, 96.0, 4608),
+            'FLAC_24': (24, 192.0, 9216),
         }[format]
 
         # lossless specs vary per album, read the actual ones from the stream header
@@ -333,7 +333,7 @@ class ModuleInterface:
             track = next((t for t in tracks_data if str(t.get(f'FILESIZE_{f}', '0')) != '0'), None)
             if track is None:
                 continue
-            bit_depth, sample_rate = (24, 96.0) if f == 'FLAC_24' else (16, 44.1)
+            bit_depth, sample_rate = (24, 192.0) if f == 'FLAC_24' else (16, 44.1)
             if f in ('FLAC', 'FLAC_24'):
                 specs = self._get_probed_specs(album_id, track, f)
                 if specs:

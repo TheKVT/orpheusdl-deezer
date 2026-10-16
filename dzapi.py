@@ -204,7 +204,7 @@ class DeezerAPI:
         return media[0]['sources'][0]['url']
 
     def probe_flac_specs(self, id, track_token, track_token_expiry, format):
-        # lossless streams vary per track (16/44.1 to 24/96), true specs live in the
+        # lossless streams vary per track (16/44.1 to 24/192), true specs live in the
         # STREAMINFO header of the first stream chunk
         url = self.get_track_url(id, track_token, track_token_expiry, format)
         req = self.s.get(url, stream=True)
