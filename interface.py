@@ -10,7 +10,7 @@ from .dzapi import DeezerAPI
 module_information = ModuleInformation(
     service_name = 'Deezer',
     module_supported_modes = ModuleModes.download | ModuleModes.lyrics | ModuleModes.covers | ModuleModes.credits,
-    global_settings = {'client_id': '447462', 'client_secret': 'a83bf7f38ad2f137e444727cfc3775cf', 'bf_secret': ''},
+    global_settings = {'client_id': '447462', 'client_secret': 'a83bf7f38ad2f137e444727cfc3775cf', 'bf_secret': '', 'quality_format': '{bit_depth}B-{sample_rate}kHz'},
     session_settings = {'email': '', 'password': '', 'arl': ''},
     session_storage_variables = ['arl'],
     netlocation_constant = 'deezer',
@@ -48,6 +48,7 @@ class ModuleInterface:
             QualityEnum.HIFI: 'FLAC_24'
         }
         self.format = self.quality_parse[module_controller.orpheus_options.quality_tier]
+        self.quality_format = self.settings.get('quality_format', '')
         self.compression_nums = {
             CoverCompressionEnum.high: 80,
             CoverCompressionEnum.low: 50
@@ -251,6 +252,7 @@ class ModuleInterface:
 
         return AlbumInfo(
             name = a_data['ALB_TITLE'],
+            quality = self._get_album_quality(tracks_data),
             artist = a_data['ART_NAME'],
             tracks = [track['SNG_ID'] for track in tracks_data],
             release_year = alb_tags['release_date'].split('-')[0],
@@ -293,6 +295,30 @@ class ModuleInterface:
             name = name,
             albums = self.session.get_artist_album_ids(artist_id, 0, -1, get_credited_albums),
         )
+
+    def _get_album_quality(self, tracks_data):
+        if not self.quality_format:
+            return None
+
+        # best format any track in the album has, in the same fallback order used per track
+        premium_formats = ['FLAC_24', 'FLAC', 'MP3_320']
+        chain = premium_formats[premium_formats.index(self.format):] if self.format in premium_formats else [self.format]
+        for f in chain:
+            track = next((t for t in tracks_data if str(t.get(f'FILESIZE_{f}', '0')) != '0'), None)
+            if track is None:
+                continue
+            bit_depth, sample_rate = (24, 96.0) if f == 'FLAC_24' else (16, 44.1)
+            if f in ('FLAC', 'FLAC_24'):
+                try:
+                    t_data = self.session.get_track(track['SNG_ID'])['DATA']
+                    specs = self.session.probe_flac_specs(t_data['SNG_ID'], t_data['TRACK_TOKEN'], t_data['TRACK_TOKEN_EXPIRE'], f)
+                    if specs:
+                        bit_depth = specs['bit_depth']
+                        sample_rate = specs['sample_rate'] / 1000.0
+                except Exception:
+                    pass
+            return self.quality_format.format(bit_depth=bit_depth, sample_rate=sample_rate)
+        return self.quality_format.format(bit_depth=16, sample_rate=44.1)
 
     def get_track_credits(self, track_id: str, data={}):
         if int(track_id) < 0:
